@@ -372,7 +372,22 @@ func legacyHTML(c *gin.Context, msg string) {
 	c.String(200, "<html><body><h3>"+msg+"</h3></body></html>")
 }
 
+func legacyPayAppName(payType string) string {
+	switch strings.ToLower(strings.TrimSpace(payType)) {
+	case "alipay", "ali":
+		return "支付宝"
+	case "wxpay", "wechat", "wx":
+		return "微信"
+	case "qqpay", "qq":
+		return "QQ"
+	default:
+		return "支付 App"
+	}
+}
+
 func legacyQRCodePage(c *gin.Context, req *LegacyCreateOrderRequest, orderResp *service.CreateOrderResponse) {
+	payApp := legacyPayAppName(req.Type)
+	escapedPayApp := template.HTMLEscapeString(payApp)
 	escapedName := template.HTMLEscapeString(req.Name)
 	escapedAmount := template.HTMLEscapeString(req.Money)
 	escapedTradeNo := template.HTMLEscapeString(orderResp.TradeNo)
@@ -393,7 +408,7 @@ func legacyQRCodePage(c *gin.Context, req *LegacyCreateOrderRequest, orderResp *
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>请扫码完成支付</title>
+  <title>请使用%s扫码完成支付</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -592,8 +607,8 @@ func legacyQRCodePage(c *gin.Context, req *LegacyCreateOrderRequest, orderResp *
     <section class="hero">
       <div>
         <div class="badge">安全支付 · 扫码付款</div>
-        <h1 class="title">请使用微信扫码完成支付</h1>
-        <p class="subtitle">订单已经创建成功，请使用微信扫一扫扫描右侧二维码完成付款。支付成功后，系统会自动通知商户并跳转回业务页面。</p>
+        <h1 class="title">请使用%s扫码完成支付</h1>
+        <p class="subtitle">订单已经创建成功，请使用%s扫一扫扫描右侧二维码完成付款。支付成功后，系统会自动通知商户并跳转回业务页面。</p>
         <div class="summary">
           <div class="summary-item">
             <div class="summary-label">支付金额</div>
@@ -667,7 +682,7 @@ func legacyQRCodePage(c *gin.Context, req *LegacyCreateOrderRequest, orderResp *
     window.setInterval(checkPaymentStatus, 3000);
   </script>
 </body>
-</html>`, escapedAmount, escapedName, escapedTradeNo, escapedOutTradeNo, qrImageURL, returnSection, escapedPayURLHTML, escapedPayURL, statusAPIURL, escapedReturnURLJS)
+</html>`, escapedPayApp, escapedPayApp, escapedPayApp, escapedAmount, escapedName, escapedTradeNo, escapedOutTradeNo, qrImageURL, returnSection, escapedPayURLHTML, escapedPayURL, statusAPIURL, escapedReturnURLJS)
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(200, html)
