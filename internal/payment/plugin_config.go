@@ -38,6 +38,8 @@ func GetPluginConfigs() map[string]PluginConfig {
 		"wechat":    GetWechatConfig(),
 		"hf-wxpay":  GetHuifuWechatConfig(),
 		"hf-alipay": GetHuifuAlipayConfig(),
+		"xh-alipay": GetXunhuAlipayConfig(),
+		"xh-wxpay":  GetXunhuWechatConfig(),
 	}
 }
 
@@ -251,5 +253,90 @@ func GetHuifuAlipayConfig() PluginConfig {
 			{Code: "scan", Name: "扫码支付"},
 		},
 		Note: "汇付-支付宝承接：用于处理支付宝支付，客户端下单传 type=alipay 即可路由到本通道；当前仅支持扫码。",
+	}
+}
+
+func xunhuCommonInputs() []PluginConfigField {
+	return []PluginConfigField{
+		{
+			Key:         "app_id",
+			Name:        "AppID",
+			Type:        "input",
+			Required:    true,
+			Placeholder: "虎皮椒 AppID",
+		},
+		{
+			Key:         "app_secret",
+			Name:        "密钥",
+			Type:        "input",
+			Required:    true,
+			Placeholder: "虎皮椒 AppSecret",
+		},
+		{
+			Key:         "gateway",
+			Name:        "支付网关",
+			Type:        "input",
+			Required:    false,
+			Placeholder: "https://api.xunhupay.com/payment/do.html",
+			Note:        "可换备用网关 https://api.dpweixin.com/payment/do.html",
+		},
+		{
+			Key:         "query_url",
+			Name:        "查询网关",
+			Type:        "input",
+			Required:    false,
+			Placeholder: "https://api.xunhupay.com/payment/query.html",
+		},
+		{
+			Key:         "wap_name",
+			Name:        "店铺名称",
+			Type:        "input",
+			Required:    false,
+			Placeholder: "AdminCloud",
+		},
+		{
+			Key:      "prefer_qr",
+			Name:     "优先二维码链接",
+			Type:     "select",
+			Required: false,
+			Options: map[string]string{
+				"false": "否（跳转 url）",
+				"true":  "是（优先 url_qrcode）",
+			},
+		},
+	}
+}
+
+// GetXunhuAlipayConfig 虎皮椒-支付宝
+func GetXunhuAlipayConfig() PluginConfig {
+	return PluginConfig{
+		Name:     "xh-alipay",
+		ShowName: "虎皮椒（支付宝）",
+		Author:   "虎皮椒/XunhuPay",
+		Link:     "https://www.xunhupay.com/plugin.html",
+		Inputs:   xunhuCommonInputs(),
+		PayTypes: []PayTypeOption{
+			{Code: "web", Name: "跳转支付"},
+			{Code: "h5", Name: "H5跳转"},
+			{Code: "scan", Name: "扫码(url_qrcode)"},
+		},
+		Note: "上游虎皮椒：客户端 type=alipay 可路由到本通道。回调地址自动为 /api/pay/notify/xh-alipay",
+	}
+}
+
+// GetXunhuWechatConfig 虎皮椒-微信
+func GetXunhuWechatConfig() PluginConfig {
+	return PluginConfig{
+		Name:     "xh-wxpay",
+		ShowName: "虎皮椒（微信）",
+		Author:   "虎皮椒/XunhuPay",
+		Link:     "https://www.xunhupay.com/plugin.html",
+		Inputs:   xunhuCommonInputs(),
+		PayTypes: []PayTypeOption{
+			{Code: "web", Name: "跳转支付"},
+			{Code: "h5", Name: "H5跳转"},
+			{Code: "scan", Name: "扫码(url_qrcode)"},
+		},
+		Note: "上游虎皮椒：客户端 type=wxpay 可路由到本通道。回调地址自动为 /api/pay/notify/xh-wxpay",
 	}
 }

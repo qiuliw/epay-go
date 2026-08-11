@@ -86,7 +86,7 @@ services:
     container_name: epay-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "18080:80"
     depends_on:
       backend:
         condition: service_healthy
