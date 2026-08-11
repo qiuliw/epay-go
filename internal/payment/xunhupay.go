@@ -95,9 +95,6 @@ func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 	if strings.TrimSpace(cfg.RefundURL) == "" {
 		cfg.RefundURL = defaultXunhuRefund
 	}
-	if strings.TrimSpace(cfg.WapName) == "" {
-		cfg.WapName = "AdminCloud"
-	}
 	if strings.TrimSpace(cfg.Plugins) == "" {
 		cfg.Plugins = "epay-go"
 	}
@@ -202,8 +199,10 @@ func (a *XunhuAdapter) CreateOrder(ctx context.Context, req *CreateOrderRequest)
 		"notify_url":     req.NotifyURL,
 		"return_url":     req.ReturnURL,
 		"callback_url":   req.ReturnURL,
-		"wap_name":       a.config.WapName,
 		"plugins":        a.config.Plugins,
+	}
+	if a.config.WapName != "" {
+		params["wap_name"] = a.config.WapName
 	}
 	if a.config.PaymentType != "" {
 		params["type"] = a.config.PaymentType

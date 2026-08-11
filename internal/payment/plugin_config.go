@@ -301,7 +301,7 @@ func xunhuCommonInputs() []PluginConfigField {
 			Name:        "店铺名称",
 			Type:        "input",
 			Required:    false,
-			Placeholder: "AdminCloud",
+			Placeholder: "请输入店铺名称（可选）",
 		},
 		{
 			Key:      "prefer_qr",
