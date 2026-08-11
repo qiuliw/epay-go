@@ -22,14 +22,14 @@ import (
 const defaultXunhuGateway = "https://api.xunhupay.com/payment/do.html"
 const defaultXunhuQuery = "https://api.xunhupay.com/payment/query.html"
 
-// XunhuConfig 虎皮椒通道配置
+// XunhuConfig 虎皮椒（XunhuPay）配置
 type XunhuConfig struct {
 	AppID       string `json:"app_id"`
 	AppSecret   string `json:"app_secret"`
 	Gateway     string `json:"gateway"`      // 支付网关，默认官方 do.html
 	QueryURL    string `json:"query_url"`    // 查询网关，默认官方 query.html
 	WapName     string `json:"wap_name"`     // 店铺名
-	Plugins     string `json:"plugins"`      // 识别对接方
+	Plugins     string `json:"plugins"`      // 对接程序标识
 	PreferQR    bool   `json:"prefer_qr"`    // true 时优先返回 url_qrcode
 	PaymentType string `json:"payment_type"` // 可选：alipay / wechat（部分账户支持）
 }
@@ -41,15 +41,18 @@ type XunhuAdapter struct {
 }
 
 func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
+	// 兼容旧字段名（历史通道配置）
 	var m map[string]interface{}
 	_ = json.Unmarshal(configJSON, &m)
 	preferQR := false
 	if m != nil {
+		// appid -> app_id
 		if _, ok := m["app_id"]; !ok {
 			if v, ok2 := m["appid"]; ok2 {
 				m["app_id"] = v
 			}
 		}
+		// appsecret / secret -> app_secret
 		if _, ok := m["app_secret"]; !ok {
 			if v, ok2 := m["appsecret"]; ok2 {
 				m["app_secret"] = v
@@ -57,6 +60,7 @@ func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 				m["app_secret"] = v
 			}
 		}
+		// 后台表单多为字符串，单独解析 prefer_qr
 		if v, ok := m["prefer_qr"]; ok {
 			switch t := v.(type) {
 			case bool:
@@ -109,6 +113,7 @@ func NewXunhuWechatAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 	return newXunhuAdapter(configJSON)
 }
 
+// sign 按虎皮椒规则生成 hash：参数名 ASCII 排序后拼接，末尾直接追加 AppSecret，再 MD5
 func (a *XunhuAdapter) sign(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
@@ -181,6 +186,7 @@ func asString(v interface{}) string {
 	}
 }
 
+// CreateOrder 创建支付订单
 func (a *XunhuAdapter) CreateOrder(ctx context.Context, req *CreateOrderRequest) (*CreateOrderResponse, error) {
 	_ = ctx
 	params := map[string]string{
@@ -212,8 +218,8 @@ func (a *XunhuAdapter) CreateOrder(ctx context.Context, req *CreateOrderRequest)
 		return nil, errors.New(msg)
 	}
 
-	payURL := asString(out["url"])
-	qrURL := asString(out["url_qrcode"])
+	payURL := asString(out["url"])       // 跳转支付链接（手机端）
+	qrURL := asString(out["url_qrcode"]) // 二维码链接（PC 扫码）
 
 	method := strings.ToLower(strings.TrimSpace(req.PayMethod))
 	useQR := a.config.PreferQR || method == "scan" || method == "qrcode" || method == "native"
@@ -229,6 +235,7 @@ func (a *XunhuAdapter) CreateOrder(ctx context.Context, req *CreateOrderRequest)
 	return nil, errors.New("xunhupay returned empty pay url")
 }
 
+// QueryOrder 查询订单
 func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOrderResponse, error) {
 	_ = ctx
 	out, err := a.postForm(a.config.QueryURL, map[string]string{
@@ -246,6 +253,7 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 		return nil, errors.New(msg)
 	}
 
+	// 虎皮椒状态：OD 已支付，CD 已退款/关闭，RD 退款中
 	statusRaw := strings.ToUpper(asString(out["status"]))
 	status := "pending"
 	switch statusRaw {
@@ -271,15 +279,17 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 	}, nil
 }
 
+// Refund 退款（虎皮椒退款接口尚未在本适配器实现）
 func (a *XunhuAdapter) Refund(ctx context.Context, req *RefundRequest) (*RefundResponse, error) {
 	_ = ctx
 	return &RefundResponse{
 		RefundNo:     req.RefundNo,
 		Status:       "failed",
-		ErrorMessage: "xunhupay refund is not supported via this adapter",
+		ErrorMessage: "xunhupay refund is not implemented yet",
 	}, nil
 }
 
+// ParseNotify 解析回调通知
 func (a *XunhuAdapter) ParseNotify(ctx context.Context, r *http.Request) (*NotifyResult, error) {
 	_ = ctx
 	if err := r.ParseForm(); err != nil {
@@ -292,6 +302,7 @@ func (a *XunhuAdapter) ParseNotify(ctx context.Context, r *http.Request) (*Notif
 		}
 	}
 
+	// 验签
 	got := params["hash"]
 	if got == "" {
 		return nil, errors.New("missing hash")
@@ -321,6 +332,7 @@ func (a *XunhuAdapter) ParseNotify(ctx context.Context, r *http.Request) (*Notif
 	}, nil
 }
 
+// NotifySuccess 返回成功响应
 func (a *XunhuAdapter) NotifySuccess() string {
 	return "success"
 }

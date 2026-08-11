@@ -90,11 +90,11 @@ func (r *ChannelRepository) GetAvailableByPayType(payType string) (*model.Channe
 
 	switch normalizedPayType {
 	case "wxpay", "wechat":
-		// 官方微信 / 汇付微信 / 虎皮椒微信
+		// 官方微信(plugin=wechat) 或 汇付微信(plugin=hf-wxpay) 或 虎皮椒微信(plugin=xh-wxpay)
 		query = query.Where("plugin IN ? OR pay_types LIKE ?",
 			[]string{"wechat", "hf-wxpay", "xh-wxpay"}, "%"+normalizedPayType+"%")
 	case "alipay":
-		// 官方支付宝 / 汇付支付宝 / 虎皮椒支付宝
+		// 官方支付宝(plugin=alipay) 或 汇付支付宝(plugin=hf-alipay) 或 虎皮椒支付宝(plugin=xh-alipay)
 		query = query.Where("plugin IN ? OR pay_types LIKE ?",
 			[]string{"alipay", "hf-alipay", "xh-alipay"}, "%"+normalizedPayType+"%")
 	default:
