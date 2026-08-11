@@ -256,6 +256,7 @@ func GetHuifuAlipayConfig() PluginConfig {
 	}
 }
 
+// xunhuCommonInputs 虎皮椒两个插件共用的商户凭证字段
 func xunhuCommonInputs() []PluginConfigField {
 	return []PluginConfigField{
 		{
@@ -286,6 +287,14 @@ func xunhuCommonInputs() []PluginConfigField {
 			Type:        "input",
 			Required:    false,
 			Placeholder: "https://api.xunhupay.com/payment/query.html",
+		},
+		{
+			Key:         "refund_url",
+			Name:        "退款网关",
+			Type:        "input",
+			Required:    false,
+			Placeholder: "https://api.xunhupay.com/payment/refund.html",
+			Note:        "可换备用网关 https://api.dpweixin.com/payment/refund.html；官方按整单退款",
 		},
 		{
 			Key:         "wap_name",

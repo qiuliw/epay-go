@@ -21,6 +21,7 @@ import (
 
 const defaultXunhuGateway = "https://api.xunhupay.com/payment/do.html"
 const defaultXunhuQuery = "https://api.xunhupay.com/payment/query.html"
+const defaultXunhuRefund = "https://api.xunhupay.com/payment/refund.html"
 
 // XunhuConfig 虎皮椒（XunhuPay）配置
 type XunhuConfig struct {
@@ -28,6 +29,7 @@ type XunhuConfig struct {
 	AppSecret   string `json:"app_secret"`
 	Gateway     string `json:"gateway"`      // 支付网关，默认官方 do.html
 	QueryURL    string `json:"query_url"`    // 查询网关，默认官方 query.html
+	RefundURL   string `json:"refund_url"`   // 退款网关，默认官方 refund.html
 	WapName     string `json:"wap_name"`     // 店铺名
 	Plugins     string `json:"plugins"`      // 对接程序标识
 	PreferQR    bool   `json:"prefer_qr"`    // true 时优先返回 url_qrcode
@@ -89,6 +91,9 @@ func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 	}
 	if strings.TrimSpace(cfg.QueryURL) == "" {
 		cfg.QueryURL = defaultXunhuQuery
+	}
+	if strings.TrimSpace(cfg.RefundURL) == "" {
+		cfg.RefundURL = defaultXunhuRefund
 	}
 	if strings.TrimSpace(cfg.WapName) == "" {
 		cfg.WapName = "AdminCloud"
@@ -279,13 +284,72 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 	}, nil
 }
 
-// Refund 退款（虎皮椒退款接口尚未在本适配器实现）
+// Refund 退款
+// 官方退款接口按整单退款（不传退款金额），仅传商户订单号 trade_order_id
 func (a *XunhuAdapter) Refund(ctx context.Context, req *RefundRequest) (*RefundResponse, error) {
 	_ = ctx
+	if req.TradeNo == "" {
+		return &RefundResponse{
+			RefundNo:     req.RefundNo,
+			Status:       "failed",
+			ErrorMessage: "trade_no required",
+		}, nil
+	}
+	// 官方接口无退款金额字段，部分退款暂不支持
+	if !req.Amount.IsZero() && !req.TotalAmount.IsZero() && !req.Amount.Equal(req.TotalAmount) {
+		return &RefundResponse{
+			RefundNo:     req.RefundNo,
+			Status:       "failed",
+			ErrorMessage: "xunhupay only supports full-order refund",
+		}, nil
+	}
+
+	params := map[string]string{
+		"trade_order_id": req.TradeNo,
+	}
+	if req.RefundDesc != "" {
+		params["reason"] = req.RefundDesc
+	}
+
+	out, err := a.postForm(a.config.RefundURL, params)
+	if err != nil {
+		return nil, err
+	}
+
+	errcode := asString(out["errcode"])
+	if errcode != "" && errcode != "0" {
+		msg := asString(out["errmsg"])
+		if msg == "" {
+			msg = "xunhupay refund failed"
+		}
+		return &RefundResponse{
+			RefundNo:     req.RefundNo,
+			Status:       "failed",
+			ErrorMessage: msg,
+		}, nil
+	}
+
+	// refund_status: CD 已退款，RD 退款中，UD 退款失败
+	statusRaw := strings.ToUpper(asString(out["refund_status"]))
+	status := "processing"
+	switch statusRaw {
+	case "CD", "SUCCESS", "REFUNDED":
+		status = "success"
+	case "RD", "PROCESSING":
+		status = "processing"
+	case "UD", "FAILED", "FAIL":
+		status = "failed"
+	}
+
+	apiRefundNo := asString(out["out_refund_no"])
+	if apiRefundNo == "" {
+		apiRefundNo = asString(out["transaction_id"])
+	}
+
 	return &RefundResponse{
-		RefundNo:     req.RefundNo,
-		Status:       "failed",
-		ErrorMessage: "xunhupay refund is not implemented yet",
+		RefundNo:    req.RefundNo,
+		ApiRefundNo: apiRefundNo,
+		Status:      status,
 	}, nil
 }
 
