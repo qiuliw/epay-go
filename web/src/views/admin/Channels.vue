@@ -69,7 +69,7 @@
         <a-form-item label="回调地址（可选）">
           <a-input
             v-model="form.callback_url"
-            placeholder="留空则自动拼接；HTTPS 站点请填完整路径，如 https://域名/api/pay/notify/xh-alipay（勿只填域名）"
+            placeholder="留空则自动使用当前访问域名拼接；如需自定义请填写完整地址，如 https://pay.example.com/api/pay/notify/alipay"
           />
         </a-form-item>
 
