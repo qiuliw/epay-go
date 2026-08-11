@@ -305,13 +305,14 @@ func xunhuCommonInputs() []PluginConfigField {
 		},
 		{
 			Key:      "prefer_qr",
-			Name:     "优先二维码链接",
+			Name:     "按扫码方式返回",
 			Type:     "select",
 			Required: false,
 			Options: map[string]string{
-				"false": "否（跳转 url）",
-				"true":  "是（优先 url_qrcode）",
+				"false": "否（仅 pay_method=scan 时扫码）",
+				"true":  "是（优先返回可生成二维码的跳转链接）",
 			},
+			Note: "扫码使用上游 url（支付跳转链），不用 url_qrcode 图片链，避免被二次编码",
 		},
 	}
 }
@@ -327,7 +328,7 @@ func GetXunhuAlipayConfig() PluginConfig {
 		PayTypes: []PayTypeOption{
 			{Code: "web", Name: "跳转支付"},
 			{Code: "h5", Name: "H5跳转"},
-			{Code: "scan", Name: "扫码(url_qrcode)"},
+			{Code: "scan", Name: "扫码（跳转链接生成二维码）"},
 		},
 		Note: "上游虎皮椒：客户端 type=alipay 可路由到本通道。回调地址自动为 /api/pay/notify/xh-alipay",
 	}
@@ -344,7 +345,7 @@ func GetXunhuWechatConfig() PluginConfig {
 		PayTypes: []PayTypeOption{
 			{Code: "web", Name: "跳转支付"},
 			{Code: "h5", Name: "H5跳转"},
-			{Code: "scan", Name: "扫码(url_qrcode)"},
+			{Code: "scan", Name: "扫码（跳转链接生成二维码）"},
 		},
 		Note: "上游虎皮椒：客户端 type=wxpay 可路由到本通道。回调地址自动为 /api/pay/notify/xh-wxpay",
 	}

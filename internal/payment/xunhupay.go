@@ -211,19 +211,20 @@ func (a *XunhuAdapter) CreateOrder(ctx context.Context, req *CreateOrderRequest)
 		return nil, errors.New(msg)
 	}
 
-	payURL := asString(out["url"])       // 跳转支付链接（手机端）
-	qrURL := asString(out["url_qrcode"]) // 二维码链接（PC 扫码）
+	payURL := asString(out["url"])       // 跳转支付链接（一扫直达）
+	qrURL := asString(out["url_qrcode"]) // 已是二维码图片地址，不能再当 qrcode 内容二次编码
 
 	method := strings.ToLower(strings.TrimSpace(req.PayMethod))
 	useQR := a.config.PreferQR || method == "scan" || method == "qrcode" || method == "native"
-	if useQR && qrURL != "" {
-		return &CreateOrderResponse{PayType: "qrcode", PayURL: qrURL}, nil
+	// 扫码：返回可跳转 url 供下游生成二维码；url_qrcode 是图片链，返回后会被再编码导致需扫两次
+	if useQR && payURL != "" {
+		return &CreateOrderResponse{PayType: "qrcode", PayURL: payURL}, nil
 	}
 	if payURL != "" {
 		return &CreateOrderResponse{PayType: "redirect", PayURL: payURL}, nil
 	}
 	if qrURL != "" {
-		return &CreateOrderResponse{PayType: "qrcode", PayURL: qrURL}, nil
+		return &CreateOrderResponse{PayType: "redirect", PayURL: qrURL}, nil
 	}
 	return nil, errors.New("xunhupay returned empty pay url")
 }
