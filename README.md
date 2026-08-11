@@ -56,6 +56,20 @@ docker compose up -d --build
 - **商户注册**：`/merchant/register`
 - **商户登录**：`/merchant/login`
 
+### 路由关系
+
+`type` **由下游商家 / 插件在下单时传入**（如 `alipay`、`wxpay`）。本平台不要求商家指定上游；管理员在后台启用通道并设置 `sort` 后，系统自动路由：
+
+```mermaid
+flowchart LR
+  merchant["商家 / 下游插件"] -->|"type=alipay 或 wxpay"| api["下单 API"]
+  api --> route["GetAvailableByPayType"]
+  route -->|"status=1 且 sort 最小"| channel["具体上游通道"]
+  channel --> xh["xh-alipay / xh-wxpay"]
+  channel --> official["alipay / wechat"]
+  channel --> hf["hf-alipay / hf-wxpay"]
+```
+
 ## 环境变量
 
 参考 `.env.example`。常用变量包括：
