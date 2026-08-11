@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 	"time"
 
@@ -117,14 +118,7 @@ func (s *OrderService) Create(ctx context.Context, req *CreateOrderRequest) (*Cr
 		payMethod = "scan" // 默认扫码
 	}
 
-	providerNotifyURL := req.NotifyURL
-	if req.PlatformBaseURL != "" {
-		providerNotifyURL = strings.TrimRight(req.PlatformBaseURL, "/") + "/api/pay/notify/" + channel.Plugin
-	}
-	// 通道配置了回调URL时才覆盖；未配置(空字符串)则完全走上面的 Host 拼接逻辑，行为不变
-	if channel.CallbackURL != "" {
-		providerNotifyURL = channel.CallbackURL
-	}
+	providerNotifyURL := resolveProviderNotifyURL(req.NotifyURL, req.PlatformBaseURL, channel)
 	log.Printf("Provider notify url resolved: trade_no=%s channel=%s url=%s", tradeNo, channel.Plugin, providerNotifyURL)
 
 	payReq := &payment.CreateOrderRequest{
@@ -280,10 +274,7 @@ func (s *OrderService) CreateTestOrder(channelID int64, amount, payType, platfor
 	}
 
 	// 调用支付接口
-	providerNotifyURL := strings.TrimRight(platformBaseURL, "/") + "/api/pay/notify/" + channel.Plugin
-	if channel.CallbackURL != "" {
-		providerNotifyURL = channel.CallbackURL
-	}
+	providerNotifyURL := resolveProviderNotifyURL("", platformBaseURL, channel)
 	log.Printf("Provider notify url resolved: trade_no=%s channel=%s url=%s", tradeNo, channel.Plugin, providerNotifyURL)
 	payReq := &payment.CreateOrderRequest{
 		TradeNo:   tradeNo,
@@ -310,4 +301,29 @@ func (s *OrderService) CreateTestOrder(channelID int64, amount, payType, platfor
 	}
 
 	return order, payData, nil
+}
+
+// resolveProviderNotifyURL 解析上游回调地址；通道只填域名时自动补全 /api/pay/notify/{plugin}
+func resolveProviderNotifyURL(fallback, platformBaseURL string, channel *model.Channel) string {
+	notifyPath := "/api/pay/notify/" + channel.Plugin
+	providerNotifyURL := fallback
+	if platformBaseURL != "" {
+		providerNotifyURL = strings.TrimRight(platformBaseURL, "/") + notifyPath
+	}
+	if strings.TrimSpace(channel.CallbackURL) == "" {
+		return providerNotifyURL
+	}
+
+	raw := strings.TrimSpace(channel.CallbackURL)
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = notifyPath
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String()
+	}
+	return raw
 }

@@ -247,8 +247,11 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 		return nil, errors.New(msg)
 	}
 
+	// 查询接口业务字段在 data 内
+	data := xunhuPayload(out)
+
 	// 虎皮椒状态：OD 已支付，CD 已退款/关闭，RD 退款中
-	statusRaw := strings.ToUpper(asString(out["status"]))
+	statusRaw := strings.ToUpper(asString(data["status"]))
 	status := "pending"
 	switch statusRaw {
 	case "OD", "PAID", "SUCCESS":
@@ -259,10 +262,14 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 		status = "refunded"
 	}
 
-	amount, _ := decimal.NewFromString(asString(out["total_fee"]))
-	apiTradeNo := asString(out["transaction_id"])
+	amountStr := asString(data["total_fee"])
+	if amountStr == "" {
+		amountStr = asString(data["total_amount"])
+	}
+	amount, _ := decimal.NewFromString(amountStr)
+	apiTradeNo := asString(data["transaction_id"])
 	if apiTradeNo == "" {
-		apiTradeNo = asString(out["open_order_id"])
+		apiTradeNo = asString(data["open_order_id"])
 	}
 
 	return &QueryOrderResponse{
@@ -271,6 +278,19 @@ func (a *XunhuAdapter) QueryOrder(ctx context.Context, tradeNo string) (*QueryOr
 		Amount:     amount,
 		Status:     status,
 	}, nil
+}
+
+// xunhuPayload 取业务字段：有 data 对象则用 data，否则用顶层
+func xunhuPayload(out map[string]interface{}) map[string]interface{} {
+	if out == nil {
+		return map[string]interface{}{}
+	}
+	if raw, ok := out["data"]; ok {
+		if m, ok := raw.(map[string]interface{}); ok && m != nil {
+			return m
+		}
+	}
+	return out
 }
 
 // Refund 退款
