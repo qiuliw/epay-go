@@ -8,7 +8,11 @@ import (
 	"github.com/example/epay-go/internal/model"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// 认领租约：处理中把 next_*_at 推到未来，避免被重复捞取；崩溃后到期可再认领
+const pendingClaimLease = 60 * time.Second
 
 type OrderRepository struct {
 	db *gorm.DB
@@ -121,7 +125,89 @@ func (r *OrderRepository) List(page, pageSize int, merchantID *int64, status *in
 	return orders, total, nil
 }
 
-// GetPendingNotifyOrders 获取待通知的订单
+// ClaimPendingNotifyOrders 认领待通知订单（FOR UPDATE SKIP LOCKED + 短租约）
+func (r *OrderRepository) ClaimPendingNotifyOrders(limit int) ([]model.Order, error) {
+	var claimed []model.Order
+	now := time.Now()
+	leaseUntil := now.Add(pendingClaimLease)
+
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var orders []model.Order
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ? AND notify_status < ? AND (next_notify_at IS NULL OR next_notify_at <= ?)",
+				model.OrderStatusPaid, model.NotifyStatusSuccess, now).
+			Order("id ASC").
+			Limit(limit).
+			Find(&orders).Error; err != nil {
+			return err
+		}
+		if len(orders) == 0 {
+			return nil
+		}
+
+		ids := make([]int64, len(orders))
+		for i := range orders {
+			ids[i] = orders[i].ID
+		}
+		if err := tx.Model(&model.Order{}).Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"notify_status":  model.NotifyStatusSending,
+				"next_notify_at": leaseUntil,
+			}).Error; err != nil {
+			return err
+		}
+
+		for i := range orders {
+			orders[i].NotifyStatus = model.NotifyStatusSending
+			t := leaseUntil
+			orders[i].NextNotifyAt = &t
+		}
+		claimed = orders
+		return nil
+	})
+	return claimed, err
+}
+
+// ClaimPendingQueryOrders 认领待主动查询订单（FOR UPDATE SKIP LOCKED + 短租约）
+func (r *OrderRepository) ClaimPendingQueryOrders(limit int) ([]model.Order, error) {
+	var claimed []model.Order
+	now := time.Now()
+	leaseUntil := now.Add(pendingClaimLease)
+
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var orders []model.Order
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ? AND next_query_at IS NOT NULL AND next_query_at <= ?",
+				model.OrderStatusUnpaid, now).
+			Order("id ASC").
+			Limit(limit).
+			Find(&orders).Error; err != nil {
+			return err
+		}
+		if len(orders) == 0 {
+			return nil
+		}
+
+		ids := make([]int64, len(orders))
+		for i := range orders {
+			ids[i] = orders[i].ID
+		}
+		if err := tx.Model(&model.Order{}).Where("id IN ?", ids).
+			Update("next_query_at", leaseUntil).Error; err != nil {
+			return err
+		}
+
+		for i := range orders {
+			t := leaseUntil
+			orders[i].NextQueryAt = &t
+		}
+		claimed = orders
+		return nil
+	})
+	return claimed, err
+}
+
+// GetPendingNotifyOrders 获取待通知的订单（只读，不做认领；测试/运维用）
 func (r *OrderRepository) GetPendingNotifyOrders(limit int) ([]model.Order, error) {
 	var orders []model.Order
 	err := r.db.Where("status = ? AND notify_status < ? AND (next_notify_at IS NULL OR next_notify_at <= ?)",
@@ -130,7 +216,7 @@ func (r *OrderRepository) GetPendingNotifyOrders(limit int) ([]model.Order, erro
 	return orders, err
 }
 
-// GetPendingQueryOrders 获取待主动查询的未支付订单
+// GetPendingQueryOrders 获取待主动查询的未支付订单（只读，不做认领）
 func (r *OrderRepository) GetPendingQueryOrders(limit int) ([]model.Order, error) {
 	var orders []model.Order
 	err := r.db.Where("status = ? AND next_query_at IS NOT NULL AND next_query_at <= ?",

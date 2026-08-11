@@ -83,6 +83,10 @@ func main() {
 	orderQueryService := service.NewOrderQueryService()
 	go orderQueryService.StartQueryWorker(ctx)
 
+	log.Printf("Workers configured: notify_concurrency=%d notify_poll=%ds query_concurrency=%d query_poll=%ds",
+		cfg.Worker.NotifyConcurrency, cfg.Worker.NotifyPollIntervalSec,
+		cfg.Worker.QueryConcurrency, cfg.Worker.QueryPollIntervalSec)
+
 	// 创建 HTTP 服务器
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	srv := &http.Server{

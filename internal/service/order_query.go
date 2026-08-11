@@ -4,12 +4,17 @@ package service
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
+	"github.com/example/epay-go/internal/config"
 	"github.com/example/epay-go/internal/model"
 	"github.com/example/epay-go/internal/payment"
 	"github.com/example/epay-go/internal/repository"
+	"github.com/example/epay-go/internal/worker"
 )
+
+const queryClaimBatchSize = 50
 
 // QueryIntervals 主动查单相邻两次查询的间隔（累加）：创建后20s第1次，之后依次再等30s/60s/120s/300s
 var QueryIntervals = []time.Duration{
@@ -27,47 +32,81 @@ func FirstQueryAt(from time.Time) time.Time {
 
 // OrderQueryService 订单主动查单补偿服务
 type OrderQueryService struct {
-	orderRepo   *repository.OrderRepository
-	channelRepo *repository.ChannelRepository
-	orderSvc    *OrderService
-	notifySvc   *NotifyService
+	orderRepo    *repository.OrderRepository
+	channelRepo  *repository.ChannelRepository
+	orderSvc     *OrderService
+	notifySvc    *NotifyService
+	concurrency  int
+	pollInterval time.Duration
+	pool         *worker.Pool
 }
+
+var (
+	orderQueryOnce sync.Once
+	orderQueryInst *OrderQueryService
+)
 
 func NewOrderQueryService() *OrderQueryService {
-	return &OrderQueryService{
-		orderRepo:   repository.NewOrderRepository(),
-		channelRepo: repository.NewChannelRepository(),
-		orderSvc:    NewOrderService(),
-		notifySvc:   NewNotifyService(),
-	}
+	orderQueryOnce.Do(func() {
+		concurrency := 16
+		pollSec := 2
+		if cfg := config.Get(); cfg != nil {
+			concurrency = cfg.Worker.QueryConcurrency
+			pollSec = cfg.Worker.QueryPollIntervalSec
+		}
+		orderQueryInst = &OrderQueryService{
+			orderRepo:    repository.NewOrderRepository(),
+			channelRepo:  repository.NewChannelRepository(),
+			orderSvc:     NewOrderService(),
+			notifySvc:    NewNotifyService(),
+			concurrency:  concurrency,
+			pollInterval: time.Duration(pollSec) * time.Second,
+		}
+	})
+	return orderQueryInst
 }
 
-// StartQueryWorker 启动主动查单工作协程
+// StartQueryWorker 启动主动查单调度 + 固定并发执行池
 func (s *OrderQueryService) StartQueryWorker(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	s.pool = worker.NewPool(s.concurrency)
+	s.pool.Start(ctx)
+
+	log.Printf("Order query worker started: concurrency=%d poll=%s", s.concurrency, s.pollInterval)
+
+	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Order query worker stopped")
+			s.pool.Wait()
 			return
 		case <-ticker.C:
-			s.processQueryQueue()
+			s.dispatchQuery(ctx)
 		}
 	}
 }
 
-// processQueryQueue 处理待主动查询的订单队列
-func (s *OrderQueryService) processQueryQueue() {
-	orders, err := s.orderRepo.GetPendingQueryOrders(50)
+// dispatchQuery 认领到期查单并投入固定并发池
+func (s *OrderQueryService) dispatchQuery(ctx context.Context) {
+	orders, err := s.orderRepo.ClaimPendingQueryOrders(queryClaimBatchSize)
 	if err != nil {
-		log.Printf("Get pending query orders failed: %v", err)
+		log.Printf("Claim pending query orders failed: %v", err)
+		return
+	}
+	if len(orders) == 0 {
 		return
 	}
 
-	for _, order := range orders {
-		s.queryAndProcess(&order)
+	for i := range orders {
+		order := orders[i]
+		ok := s.pool.Submit(ctx, func(context.Context) {
+			s.queryAndProcess(&order)
+		})
+		if !ok {
+			return
+		}
 	}
 }
 
@@ -107,7 +146,7 @@ func (s *OrderQueryService) queryAndProcess(order *model.Order) {
 			log.Printf("Active query: update query status failed trade_no=%s: %v", order.TradeNo, err)
 		}
 		if paidOrder, err := s.orderSvc.GetByTradeNo(order.TradeNo); err == nil && paidOrder.Status == model.OrderStatusPaid {
-			go s.notifySvc.SendNotify(paidOrder)
+			s.notifySvc.Wake()
 		}
 	case "closed":
 		if err := s.orderRepo.UpdateQueryStatus(order.TradeNo, nil); err != nil {

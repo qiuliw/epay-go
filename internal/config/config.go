@@ -10,6 +10,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
+	Worker   WorkerConfig   `mapstructure:"worker"`
 }
 
 type ServerConfig struct {
@@ -36,6 +37,14 @@ type RedisConfig struct {
 type JWTConfig struct {
 	Secret     string `mapstructure:"secret"`
 	ExpireHour int    `mapstructure:"expire_hour"`
+}
+
+// WorkerConfig 异步通知 / 主动查单的固定并发与扫库间隔
+type WorkerConfig struct {
+	NotifyConcurrency     int `mapstructure:"notify_concurrency"`
+	NotifyPollIntervalSec int `mapstructure:"notify_poll_interval_sec"`
+	QueryConcurrency      int `mapstructure:"query_concurrency"`
+	QueryPollIntervalSec  int `mapstructure:"query_poll_interval_sec"`
 }
 
 var Cfg *Config
@@ -67,8 +76,24 @@ func Load(path string) error {
 	if err := viper.Unmarshal(Cfg); err != nil {
 		return err
 	}
+	Cfg.applyWorkerDefaults()
 
 	return nil
+}
+
+func (c *Config) applyWorkerDefaults() {
+	if c.Worker.NotifyConcurrency <= 0 {
+		c.Worker.NotifyConcurrency = 16
+	}
+	if c.Worker.NotifyPollIntervalSec <= 0 {
+		c.Worker.NotifyPollIntervalSec = 2
+	}
+	if c.Worker.QueryConcurrency <= 0 {
+		c.Worker.QueryConcurrency = 16
+	}
+	if c.Worker.QueryPollIntervalSec <= 0 {
+		c.Worker.QueryPollIntervalSec = 2
+	}
 }
 
 func Get() *Config {

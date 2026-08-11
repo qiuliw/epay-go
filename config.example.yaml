@@ -20,3 +20,10 @@ redis:
 jwt:
   secret: your_jwt_secret_here_change_in_production
   expire_hour: 168  # 7 days
+
+# 异步 Worker：固定并发执行通知/查单 IO，扫库仅作调度兜底
+worker:
+  notify_concurrency: 16
+  notify_poll_interval_sec: 2
+  query_concurrency: 16
+  query_poll_interval_sec: 2

@@ -53,10 +53,10 @@ func HandleNotify(c *gin.Context) {
 			return
 		}
 
-		// 发送商户通知
+		// 唤醒通知调度，尽快投递商户回调
 		order, _ := orderService.GetByTradeNo(result.TradeNo)
 		if order != nil && order.Status == model.OrderStatusPaid {
-			go notifyService.SendNotify(order)
+			notifyService.Wake()
 		}
 	}
 

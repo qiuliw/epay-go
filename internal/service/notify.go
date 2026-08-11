@@ -12,26 +12,54 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/example/epay-go/internal/config"
 	"github.com/example/epay-go/internal/model"
 	"github.com/example/epay-go/internal/repository"
+	"github.com/example/epay-go/internal/worker"
 )
+
+const notifyClaimBatchSize = 50
 
 type NotifyService struct {
 	orderRepo    *repository.OrderRepository
 	merchantRepo *repository.MerchantRepository
 	httpClient   *http.Client
+
+	concurrency  int
+	pollInterval time.Duration
+	pool         *worker.Pool
+	wakeCh       chan struct{}
+	started      bool
 }
 
+var (
+	notifySvcOnce sync.Once
+	notifySvcInst *NotifyService
+)
+
 func NewNotifyService() *NotifyService {
-	return &NotifyService{
-		orderRepo:    repository.NewOrderRepository(),
-		merchantRepo: repository.NewMerchantRepository(),
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-	}
+	notifySvcOnce.Do(func() {
+		concurrency := 16
+		pollSec := 2
+		if cfg := config.Get(); cfg != nil {
+			concurrency = cfg.Worker.NotifyConcurrency
+			pollSec = cfg.Worker.NotifyPollIntervalSec
+		}
+		notifySvcInst = &NotifyService{
+			orderRepo:    repository.NewOrderRepository(),
+			merchantRepo: repository.NewMerchantRepository(),
+			httpClient: &http.Client{
+				Timeout: 10 * time.Second,
+			},
+			concurrency:  concurrency,
+			pollInterval: time.Duration(pollSec) * time.Second,
+			wakeCh:       make(chan struct{}, 1),
+		}
+	})
+	return notifySvcInst
 }
 
 // NotifyRetryIntervals 通知重试间隔
@@ -161,33 +189,60 @@ func (s *NotifyService) doNotify(notifyURL string, params url.Values) bool {
 	return response == "success"
 }
 
-// StartNotifyWorker 启动通知工作协程
+// Wake 即时唤醒通知调度（非阻塞；通道满则依赖扫库兜底）
+func (s *NotifyService) Wake() {
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
+}
+
+// StartNotifyWorker 启动通知调度 + 固定并发执行池
 func (s *NotifyService) StartNotifyWorker(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
+	s.pool = worker.NewPool(s.concurrency)
+	s.pool.Start(ctx)
+	s.started = true
+
+	log.Printf("Notify worker started: concurrency=%d poll=%s", s.concurrency, s.pollInterval)
+
+	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Notify worker stopped")
+			s.started = false
+			s.pool.Wait()
 			return
 		case <-ticker.C:
-			s.processNotifyQueue()
+			s.dispatchNotify(ctx)
+		case <-s.wakeCh:
+			s.dispatchNotify(ctx)
 		}
 	}
 }
 
-// processNotifyQueue 处理通知队列
-func (s *NotifyService) processNotifyQueue() {
-	orders, err := s.orderRepo.GetPendingNotifyOrders(50)
+// dispatchNotify 认领到期通知并投入固定并发池
+func (s *NotifyService) dispatchNotify(ctx context.Context) {
+	orders, err := s.orderRepo.ClaimPendingNotifyOrders(notifyClaimBatchSize)
 	if err != nil {
-		log.Printf("Get pending notify orders failed: %v", err)
+		log.Printf("Claim pending notify orders failed: %v", err)
+		return
+	}
+	if len(orders) == 0 {
 		return
 	}
 
-	for _, order := range orders {
-		if err := s.SendNotify(&order); err != nil {
-			log.Printf("Send notify failed for %s: %v", order.TradeNo, err)
+	for i := range orders {
+		order := orders[i]
+		ok := s.pool.Submit(ctx, func(context.Context) {
+			if err := s.SendNotify(&order); err != nil {
+				log.Printf("Send notify failed for %s: %v", order.TradeNo, err)
+			}
+		})
+		if !ok {
+			return
 		}
 	}
 }

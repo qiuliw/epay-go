@@ -43,26 +43,13 @@ type XunhuAdapter struct {
 }
 
 func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
-	// 兼容旧字段名（历史通道配置）
+	// 后台表单多为字符串，单独解析 prefer_qr 为 bool
 	var m map[string]interface{}
-	_ = json.Unmarshal(configJSON, &m)
+	if err := json.Unmarshal(configJSON, &m); err != nil {
+		return nil, err
+	}
 	preferQR := false
 	if m != nil {
-		// appid -> app_id
-		if _, ok := m["app_id"]; !ok {
-			if v, ok2 := m["appid"]; ok2 {
-				m["app_id"] = v
-			}
-		}
-		// appsecret / secret -> app_secret
-		if _, ok := m["app_secret"]; !ok {
-			if v, ok2 := m["appsecret"]; ok2 {
-				m["app_secret"] = v
-			} else if v, ok2 := m["secret"]; ok2 {
-				m["app_secret"] = v
-			}
-		}
-		// 后台表单多为字符串，单独解析 prefer_qr
 		if v, ok := m["prefer_qr"]; ok {
 			switch t := v.(type) {
 			case bool:
@@ -74,8 +61,10 @@ func newXunhuAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 			}
 			delete(m, "prefer_qr")
 		}
-		b, _ := json.Marshal(m)
-		configJSON = b
+		var err error
+		if configJSON, err = json.Marshal(m); err != nil {
+			return nil, err
+		}
 	}
 
 	var cfg XunhuConfig
