@@ -2,8 +2,6 @@
 package payment
 
 import (
-	"net/url"
-
 	"github.com/example/epay-go/internal/model"
 	"github.com/example/epay-go/internal/service"
 	"github.com/example/epay-go/pkg/response"
@@ -43,17 +41,12 @@ func QueryOrder(c *gin.Context) {
 	}
 	merchant := resolved.Merchant
 
-	// 验证签名
-	params := url.Values{}
-	params.Set("pid", req.Pid)
-	if req.TradeNo != "" {
-		params.Set("trade_no", req.TradeNo)
+	// 标准易支付：除 sign/sign_type/空值外，请求中全部参数参与验签
+	if err := c.Request.ParseForm(); err != nil {
+		response.ParamError(c, "参数错误")
+		return
 	}
-	if req.OutTradeNo != "" {
-		params.Set("out_trade_no", req.OutTradeNo)
-	}
-
-	if !sign.VerifyMD5Sign(params, merchant.ApiKey, req.Sign) {
+	if !sign.VerifyMD5Sign(c.Request.Form, merchant.ApiKey, req.Sign) {
 		response.Error(c, response.CodeParamError, "签名验证失败")
 		return
 	}
