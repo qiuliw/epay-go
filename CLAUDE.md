@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-EPay-Go 是一个基于 Go 的聚合支付网关系统，支持支付宝和微信支付。系统分为三个主要部分：
+EPay-Go 是一个基于 Go 的聚合支付网关系统，支持支付宝、微信、汇付天下、虎皮椒等通道。系统分为三个主要部分：
 - 对外支付 API（供商户调用）
 - 商户中心（商户管理订单和结算）
 - 管理后台（管理员管理商户和通道）
@@ -103,6 +103,8 @@ web/                 # 前端代码
 3. **具体实现**:
    - `alipay.go`: 支付宝适配器
    - `wechat.go`: 微信支付适配器
+   - `huifu.go`: 汇付天下适配器
+   - `xunhupay.go`: 虎皮椒适配器
 
 4. **注册机制**: 在 `cmd/server/main.go` 中通过匿名导入 `_ "github.com/example/epay-go/internal/payment"` 触发 `init()` 函数自动注册适配器
 

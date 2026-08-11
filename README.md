@@ -26,7 +26,7 @@
 cp .env.example .env
 ```
 
-然后按需修改数据库、Redis、JWT、默认管理员和支付渠道配置。
+然后按需修改数据库、Redis、JWT、默认管理员等配置。支付渠道密钥在管理后台「通道管理」中配置。
 
 ### 2. 启动项目
 
@@ -70,7 +70,7 @@ docker compose up -d --build
 - `SITE_ADDRESS`
 - `ACME_EMAIL`
 
-> ⚠️ 支付渠道（支付宝、微信、汇付天下）的 AppID / 商户号 / 密钥等**不在 `.env` 中配置**，而是登录管理后台后在「通道管理」里按通道填写、保存到数据库。`.env.example` 中残留的 `ALIPAY_*` / `WECHAT_*` 变量后端已不再读取，可忽略。
+> ⚠️ 支付渠道（支付宝、微信、汇付天下、虎皮椒）的 AppID / 商户号 / 密钥等**不在 `.env` 中配置**，而是登录管理后台后在「通道管理」里按通道填写、保存到数据库。
 
 系统首次启动且数据库中没有管理员时，会使用 `DEFAULT_ADMIN_USERNAME` 和 `DEFAULT_ADMIN_PASSWORD` 初始化默认管理员。
 
@@ -102,7 +102,10 @@ docker compose up -d --build
 
 - **支付宝官方**（plugin: `alipay`）
 - **微信官方**（plugin: `wechat`）
-- **汇付天下 / 斗拱聚合支付**：拆为两个独立插件——`hf-wxpay`（汇付-微信，支持扫码 / JSAPI / H5）和 `hf-alipay`（汇付-支付宝，当前仅扫码）。客户端传 `type=wxpay` 会路由到 `wechat` 或 `hf-wxpay` 通道，传 `type=alipay` 会路由到 `alipay` 或 `hf-alipay` 通道；具体走官方还是汇付，由后台通道的启用状态与排序（`sort` 升序优先）决定，对商户透明。
+- **汇付天下 / 斗拱聚合支付**：拆为两个独立插件——`hf-wxpay`（汇付-微信，支持扫码 / JSAPI / H5）和 `hf-alipay`（汇付-支付宝，当前仅扫码）。
+- **虎皮椒 / XunhuPay**：`xh-alipay`（虎皮椒-支付宝）、`xh-wxpay`（虎皮椒-微信）。
+
+客户端传 `type=wxpay` 会路由到 `wechat` / `hf-wxpay` / `xh-wxpay`，传 `type=alipay` 会路由到 `alipay` / `hf-alipay` / `xh-alipay`；具体走哪条上游，由后台通道的启用状态与排序（`sort` 升序优先）决定，对商户透明。
 
 支付通道和支付场景是分开的：
 
