@@ -17,6 +17,7 @@
         </a-form-item>
       </a-form>
     </div>
+    <BeianFooter />
   </div>
 </template>
 
@@ -25,6 +26,7 @@ import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { adminLogin } from '@/api/admin'
+import BeianFooter from '@/components/BeianFooter.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -54,6 +56,7 @@ const handleSubmit = async () => {
 
 <style scoped>
 .login-container {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
