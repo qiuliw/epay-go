@@ -1,19 +1,40 @@
 <template>
-  <footer class="beian-footer" role="contentinfo" aria-label="网站备案信息">
-    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-      苏ICP备2026026995号-1
+  <footer v-if="icp || gongan" class="beian-footer" role="contentinfo" aria-label="网站备案信息">
+    <a v-if="icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+      {{ icp }}
     </a>
     <a
+      v-if="gongan"
       class="beian-psb"
-      href="https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=32032202000643"
+      :href="gonganUrl || 'https://www.beian.gov.cn/'"
       target="_blank"
       rel="noopener noreferrer"
     >
       <img src="https://www.beian.gov.cn/img/ghs.png" alt="" width="16" height="16" />
-      <span>苏公网安备32032202000643号</span>
+      <span>{{ gongan }}</span>
     </a>
   </footer>
 </template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import request from '@/api/request'
+
+const icp = ref('')
+const gongan = ref('')
+const gonganUrl = ref('')
+
+onMounted(async () => {
+  try {
+    const res = await request.get('/api/site')
+    icp.value = res.data?.beian_icp || ''
+    gongan.value = res.data?.beian_gongan || ''
+    gonganUrl.value = res.data?.beian_gongan_url || ''
+  } catch {
+    // ignore
+  }
+})
+</script>
 
 <style scoped>
 .beian-footer {

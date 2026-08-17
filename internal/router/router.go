@@ -2,6 +2,7 @@
 package router
 
 import (
+	"github.com/example/epay-go/internal/handler"
 	"github.com/example/epay-go/internal/handler/admin"
 	"github.com/example/epay-go/internal/handler/merchant"
 	"github.com/example/epay-go/internal/handler/payment"
@@ -17,6 +18,7 @@ func Setup(r *gin.Engine) {
 	r.POST("/submit.php", payment.LegacySubmit)
 	r.POST("/mapi.php", payment.LegacyCreateOrder)
 	r.GET("/api.php", payment.LegacyAPI)
+	r.GET("/api/site", handler.GetSite)
 
 	// 对外支付 API（无需登录）
 	payAPI := r.Group("/api/pay")

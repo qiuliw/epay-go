@@ -27,3 +27,7 @@ worker:
   notify_poll_interval_sec: 2
   query_concurrency: 16
   query_poll_interval_sec: 2
+
+site:
+  beian_icp: ""
+  beian_gongan: ""

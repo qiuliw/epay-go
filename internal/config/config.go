@@ -11,6 +11,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Worker   WorkerConfig   `mapstructure:"worker"`
+	Site     SiteConfig     `mapstructure:"site"`
 }
 
 type ServerConfig struct {
@@ -37,6 +38,11 @@ type RedisConfig struct {
 type JWTConfig struct {
 	Secret     string `mapstructure:"secret"`
 	ExpireHour int    `mapstructure:"expire_hour"`
+}
+
+type SiteConfig struct {
+	BeianICP    string `mapstructure:"beian_icp"`
+	BeianGongAn string `mapstructure:"beian_gongan"`
 }
 
 // WorkerConfig 异步通知 / 主动查单的固定并发与扫库间隔
@@ -67,6 +73,8 @@ func Load(path string) error {
 	viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	viper.BindEnv("jwt.secret", "JWT_SECRET")
 	viper.BindEnv("server.mode", "GIN_MODE")
+	viper.BindEnv("site.beian_icp", "BEIAN_ICP")
+	viper.BindEnv("site.beian_gongan", "BEIAN_GONGAN")
 
 	if err := viper.ReadInConfig(); err != nil {
 		return err
