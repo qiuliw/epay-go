@@ -286,7 +286,10 @@ const handleEdit = async (record: Channel) => {
   form.daily_limit = Number(record.daily_limit)
   form.sort = record.sort
   form.status = record.status
-  form.config = typeof record.config === 'object' ? record.config : {}
+  form.config = typeof record.config === 'object' && record.config ? { ...record.config } : {}
+  if (typeof form.config.is_prod === 'boolean') {
+    form.config.is_prod = String(form.config.is_prod)
+  }
 
   modalVisible.value = true
 }

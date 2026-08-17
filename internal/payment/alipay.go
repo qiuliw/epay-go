@@ -56,6 +56,9 @@ func NewAlipayAdapter(configJSON json.RawMessage) (PaymentAdapter, error) {
 		if _, ok := m["sign_type"]; !ok {
 			m["sign_type"] = "RSA2"
 		}
+		if v, ok := m["is_prod"]; ok {
+			m["is_prod"] = coerceBool(v)
+		}
 		b, _ := json.Marshal(m)
 		configJSON = b
 	}
@@ -239,6 +242,27 @@ func (a *AlipayAdapter) ParseNotify(ctx context.Context, r *http.Request) (*Noti
 // NotifySuccess 返回成功响应
 func (a *AlipayAdapter) NotifySuccess() string {
 	return "success"
+}
+
+func coerceBool(v interface{}) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		switch t {
+		case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":
+			return true
+		default:
+			return false
+		}
+	case float64:
+		return t != 0
+	case json.Number:
+		n, _ := t.Float64()
+		return n != 0
+	default:
+		return false
+	}
 }
 
 func init() {
